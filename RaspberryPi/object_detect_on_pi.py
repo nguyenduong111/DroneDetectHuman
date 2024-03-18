@@ -9,33 +9,42 @@ import time
 from threading import Thread
 import importlib.util
 
-pkg = importlib.util.find_spec('tflite_runtime')
-if pkg:
-    from tflite_runtime.interpreter import Interpreter
-else:
-    from tensorflow.lite.python.interpreter import Interpreter
+# nếu chạy trên window thì dùng thư viện này
+from tensorflow.lite.python.interpreter import Interpreter
 
+# nếu dùng trên raspberry pi thì import như sau
+#----------------------------------------------------------------
+# pkg = importlib.util.find_spec('tflite_runtime')
+# if pkg:
+#     from tflite_runtime.interpreter import Interpreter
+# else:
+#     from tensorflow.lite.python.interpreter import Interpreter
+#----------------------------------------------------------------
 
 # -------------------------------------------------------------------------
+# biến ngắt luồng chạy
 Q = False
+
 LOCK = False
-LFRAME = cv2.imread(r'/home/pi/tflite1/test1.jpg')
+
+# biến lưu frame ảnh
+LFRAME = cv2.imread(r'D:\AI\datn\project\yolov5\1.jpg')
 
 # setup ip pi -------> redis host
-RD = redis.Redis(host='192.168.1.36', port=6379, db=0)
+RD = redis.Redis(host='192.168.0.88', port=6379, db=0)
 
 # Set up variables for running user's model yolo
-PATH_TO_MODEL_YOLO=r'/home/pi/Desktop/model_yolo/detect.tflite'   # Path to .tflite model file
-PATH_TO_LABELS_YOLO=r'/home/pi/Desktop/model_yolo/labelmap.txt'   # Path to labelmap.txt file
+PATH_TO_MODEL_YOLO=r'D:\AI\datn\project\DroneDetectHuman\RaspberryPi\model_yolo_tflite\detect.tflite'   # Path to .tflite model file
+PATH_TO_LABELS_YOLO=r'D:\AI\datn\project\DroneDetectHuman\RaspberryPi\model_yolo_tflite\labelmap.txt'   # Path to labelmap.txt file
 min_conf_threshold_YOLO=0.5
 
 # Set up variables for running user's model mobilenet
-PATH_TO_MODEL_MOBILENET=r'/home/pi/Desktop/model_mobilenet/detect.tflite'   # Path to .tflite model file
-PATH_TO_LABELS_MOBILENET=r'/home/pi/Desktop/model_mobilenet/labelmap.txt'   # Path to labelmap.txt file
-min_conf_threshold_MOBILENET=0.35  
+PATH_TO_MODEL_MOBILENET=r'D:\AI\datn\project\DroneDetectHuman\RaspberryPi\model_mobilenet_tflite\detect.tflite'   # Path to .tflite model file
+PATH_TO_LABELS_MOBILENET=r'D:\AI\datn\project\DroneDetectHuman\RaspberryPi\model_mobilenet_tflite\labelmap.txt'   # Path to labelmap.txt file
+min_conf_threshold_MOBILENET=0.5 
 
 #-----func------------------------------------------------------------------
-
+# hàm tạo folder
 def makeFolder(path):
     if not os.path.isdir(path):
         os.makedirs(path)
@@ -286,19 +295,19 @@ def tflite_detect_images_mobilenet(modelpath, image, lblpath, min_conf=0.35):
 #-------Camera-----------------------------------------------------------------------------------
 
 # Đường dẫn đến file video
-#video_path = r'D:\AI\data_collect\data_kiem_thu\data_test\c2_3m.mp4'
+video_path = r'C:\Users\Admin\Videos\video_demo.mp4'
 
-#cap = cv2.VideoCapture(video_path)
-cap = cv2.VideoCapture(0)
+cap = cv2.VideoCapture(video_path)
+#cap = cv2.VideoCapture(0)
 
 makeFolder('data_img_on_lap')
-makeFolder('buffer_on_lap')
+makeFolder('buffer')
 
 thr1_is_ready = False
 def getImgThread():
     global Q, LOCK, LFRAME, thr1_is_ready
 
-    desired_fps = 0.5
+    desired_fps = 3
     cap.set(cv2.CAP_PROP_FPS, desired_fps)
 
 
@@ -318,7 +327,7 @@ def getImgThread():
         if not r:
             break
         
-        #cv2.imshow("Video", img)
+        cv2.imshow("Video", img)
         
         k = cv2.waitKey(1)
         if k == ord("q"):
@@ -329,7 +338,7 @@ def getImgThread():
         LOCK = False
 
         # Dừng lại trong khoảng thời gian tương ứng với FPS mong muốn
-        #cv2.waitKey(int(1000 / desired_fps))
+        cv2.waitKey(int(1000 / desired_fps))
 
         thr1_is_ready = True
 
@@ -348,7 +357,7 @@ def objectDetect():
         
         if(isHuman):
             LOCK = True
-            cv2.imwrite(os.path.join('buffer_on_lap', str(time.time())+'.jpg'), imageDetect)
+            cv2.imwrite(os.path.join('buffer', str(time.time())+'.jpg'), imageDetect)
             LOCK = False
             
         time.sleep(2)
@@ -356,7 +365,7 @@ def objectDetect():
 #---------Send image from pi to server---------------------
 def sendImgThread():
     global Q
-    img_files = glob.glob(os.path.join("buffer_on_lap", "*.jpg"))
+    img_files = glob.glob(os.path.join("buffer", "*.jpg"))
     pre_name = ''
     
     while not Q:
@@ -370,7 +379,7 @@ def sendImgThread():
                 time.sleep(0.5)
                 img = cv2.imread(img_path)
                 img_byte = imageCV2Byte(img)
-                cv2.imshow('a', img)
+                #cv2.imshow('a', img)
                 cv2.waitKey(1)
 
                 data = {
@@ -398,7 +407,7 @@ def sendImgThread():
                 continue
             
         else:
-            img_files = glob.glob(os.path.join("buffer_on_lap", "*.jpg"))
+            img_files = glob.glob(os.path.join("buffer", "*.jpg"))
 
 
 #-----------Main-----------------------------------
